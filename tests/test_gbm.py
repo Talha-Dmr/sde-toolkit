@@ -1,67 +1,92 @@
+import numpy as np
 import sys
 import os
+import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import matplotlib.pyplot as plt
 from src.sde_models import (
     simulate_gbm_euler,
     simulate_vasicek_euler,
     simulate_cir_euler,
     simulate_multi_gbm_euler
 )
-import numpy as np
-
-# Simulate GBM path (single asset)
-t, s_gbm = simulate_gbm_euler(
-    S0=0.03,      # Initial value (matching the others for fair comparison)
-    mu=0.7,       # Drift
-    sigma=0.1,    # Volatility
-    T=1.0,        # Total time (years)
-    N=252,        # Number of steps
-    random_seed=42
+from src.portfolio_analytics import (
+    calc_portfolio_returns,
+    calc_portfolio_value,
+    value_at_risk,
+    conditional_value_at_risk
 )
-plt.plot(t, s_gbm, label="GBM (single asset)")
 
-# Simulate Vasicek path
-t, r_vasicek = simulate_vasicek_euler(
-    r0=0.03,
-    a=0.7,
-    b=0.05,
-    sigma=0.1,
-    T=1.0,
-    N=252,
-    random_seed=42
-)
-plt.plot(t, r_vasicek, label="Vasicek")
+# ---- Simulations and Analytics (same as before) ----
 
-# Simulate CIR path
-t, r_cir = simulate_cir_euler(
-    r0=0.03,
-    a=0.7,
-    b=0.05,
-    sigma=0.1,
-    T=1.0,
-    N=252,
-    random_seed=42
-)
-plt.plot(t, r_cir, label="CIR")
-
-# Multi-asset GBM example: 3 assets, plot first asset's path
-S0_vec = np.array([0.03, 0.04, 0.05])
-mu_vec = np.array([0.7, 0.6, 0.5])
-sigma_vec = np.array([0.1, 0.08, 0.12])
+t, s_gbm = simulate_gbm_euler(100, 0.05, 0.2, 1.0, 252, random_seed=42)
+t, r_vas = simulate_vasicek_euler(0.03, 0.7, 0.05, 0.1, 1.0, 252, random_seed=42)
+t, r_cir = simulate_cir_euler(0.03, 0.7, 0.05, 0.1, 1.0, 252, random_seed=42)
+S0_vec = np.array([100, 90, 80])
+mu_vec = np.array([0.05, 0.03, 0.07])
+sigma_vec = np.array([0.2, 0.15, 0.25])
 corr_matrix = np.array([
-    [1.0, 0.7, 0.2],
-    [0.7, 1.0, 0.4],
+    [1.0, 0.8, 0.2],
+    [0.8, 1.0, 0.4],
     [0.2, 0.4, 1.0]
 ])
-t_multi, S_paths = simulate_multi_gbm_euler(
-    S0_vec, mu_vec, sigma_vec, corr_matrix, T=1.0, N=252, random_seed=42
-)
-plt.plot(t_multi, S_paths[0], label="GBM (multi-asset, Asset 1)", linestyle="--")
+t, S_paths = simulate_multi_gbm_euler(S0_vec, mu_vec, sigma_vec, corr_matrix, 1.0, 252, random_seed=42)
+weights = np.array([0.4, 0.4, 0.2])
+port_returns = calc_portfolio_returns(S_paths, weights)
+port_value = calc_portfolio_value(port_returns, initial_value=1.0)
+var = value_at_risk(port_returns, alpha=0.01)
+cvar = conditional_value_at_risk(port_returns, alpha=0.01)
 
-plt.title("GBM, Vasicek, CIR, and Multi-Asset GBM Paths")
-plt.xlabel("Time")
-plt.ylabel("Value")
+# ---- Print summaries (optional) ----
+print(f"GBM (single) last value: {s_gbm[-1]}")
+print(f"Vasicek last value: {r_vas[-1]}")
+print(f"CIR last value: {r_cir[-1]}")
+print(f"Multi-asset GBM last values: {S_paths[:, -1]}")
+print(f"Portfolio value (final): {port_value[-1]}")
+print(f"1% VaR: {var:.4f}  |  1% CVaR: {cvar:.4f}")
+
+# ---- Plotting ----
+
+# 1. Single asset paths
+plt.figure(figsize=(10, 4))
+plt.plot(t, s_gbm, label='GBM (single)')
+plt.plot(t, r_vas, label='Vasicek')
+plt.plot(t, r_cir, label='CIR')
+plt.title('Single Asset SDE Simulated Paths')
+plt.xlabel('Time')
+plt.ylabel('Value')
 plt.legend()
+plt.tight_layout()
+plt.show()
+
+# 2. Multi-asset GBM paths
+plt.figure(figsize=(10, 4))
+for i in range(S_paths.shape[0]):
+    plt.plot(t, S_paths[i], label=f'GBM Asset {i+1}')
+plt.title('Multi-Asset GBM Simulated Paths')
+plt.xlabel('Time')
+plt.ylabel('Value')
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# 3. Portfolio value path
+plt.figure(figsize=(10, 4))
+plt.plot(port_value, color='black')
+plt.title('Portfolio Value Path')
+plt.xlabel('Time Step')
+plt.ylabel('Portfolio Value')
+plt.tight_layout()
+plt.show()
+
+# 4. Portfolio returns histogram with VaR and CVaR
+plt.figure(figsize=(8, 4))
+plt.hist(port_returns, bins=30, alpha=0.7)
+plt.axvline(var, color="red", linestyle="--", label="1% VaR")
+plt.axvline(cvar, color="orange", linestyle="--", label="1% CVaR")
+plt.title("Portfolio Return Distribution")
+plt.xlabel("Return")
+plt.ylabel("Frequency")
+plt.legend()
+plt.tight_layout()
 plt.show()
