@@ -138,3 +138,5 @@ def simulate_multi_gbm_euler(
         )
 
     return t, S_paths
+
+
